@@ -3,7 +3,10 @@ Ganeti host memory allocation monitoring tool
 Requirements:
  - Read only access to ganeti rapi (https://docs.ganeti.org/docs/ganeti/3.0/html/rapi.html#users-and-passwords)
 
+Recomendation:
+ - store login credentials in users home `.netrc` file
 
+```
 gnt-monitoring:
   -h, --help                        show this help message and exit
   --log-level                       Log level, default: warning
@@ -17,3 +20,4 @@ gnt-monitoring:
   --rapi-user RAPI_USER             Username if authentication enabled
   --rapi-password RAPI_PASSWORD     Password for user (UNSECURE, PLEASE USE netrc)
   --netrc-file NETRC_FILE           netrc file for authentication, default: /Users/arunas/.netrc
+```
