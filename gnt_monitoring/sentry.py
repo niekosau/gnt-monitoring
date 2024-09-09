@@ -1,4 +1,3 @@
-import sentry_sdk
 from logging import getLogger
 
 _logger = getLogger(__name__)
@@ -15,5 +14,10 @@ class Sentry():
     def __init__(self, dsn: str, env: str = "dev") -> None:
         """
         """
-        _logger.debug("Initializing sentry")
-        sentry_sdk.init(dsn=dsn, environment=env)
+        try:
+            import sentry_sdk
+        except ModuleNotFoundError:
+            _logger.warning("sentry_sdk not installed")
+        else:
+            _logger.debug("Initializing sentry")
+            sentry_sdk.init(dsn=dsn, environment=env)
