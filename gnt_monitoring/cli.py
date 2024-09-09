@@ -6,12 +6,12 @@ from logging import getLogger
 from gnt_monitoring.arguments import arguments
 from gnt_monitoring.logger import init_logger
 from gnt_monitoring.sentry import Sentry
-from gnt_monitoring.rapi import GntMonitoring
+from gnt_monitoring.rapi import GntMonitoring, GntRapiAuth
 from gnt_monitoring.helpers import convert_to_human, check_for_status
 from gnt_monitoring.constants import NAGIOS_STATUS_CODES
 
 
-async def memory_check(warning: float, critical: float) -> None:
+async def memory_check(**kwargs) -> None:
     """
     Memory monitoring function
     :param float warning: percentage at which return warning
@@ -19,12 +19,23 @@ async def memory_check(warning: float, critical: float) -> None:
     """
     _logger = getLogger(__name__)
     _logger.debug(f"Starting {__name__}")
+    _logger.debug(f"Received params: {kwargs}")
+    warning = kwargs.pop("warning")
+    critical = kwargs.pop("critical")
+    rapi_host = kwargs.pop("rapi_host")
+    rapi_port = kwargs.pop("rapi_port")
+    rapi_scheme = kwargs.pop("rapi_scheme")
     monitoring_data = {}
     start = time.perf_counter()
+    rapi_auth = GntRapiAuth(
+            user=kwargs.pop("rapi_user"),
+            password=kwargs.pop("rapi_password"),
+            netrc=kwargs.pop("netrc_file"))
     cluster = GntMonitoring(
-            host="10.1.1.123",
-            user="development",
-            password="n0tsOsecur3")
+            host=rapi_host,
+            port=rapi_port,
+            scheme=rapi_scheme,
+            auth=rapi_auth)
     hosts = await cluster.hosts()
     hosts = [h["id"] for h in hosts]
     for host in hosts:
@@ -76,4 +87,4 @@ def main() -> None:
     init_logger(level=args.log_level)
     if args.sentry_dsn:
         Sentry(dsn=args.sentry_dsn, env=args.sentry_env)
-    asyncio.run(memory_check(args.warning, args.critical))
+    asyncio.run(memory_check(**args.__dict__))

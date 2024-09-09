@@ -1,11 +1,40 @@
 import httpx
 import asyncio
 import json
+import os
 from logging import getLogger
 from typing import List
 from gnt_monitoring.helpers import percentage
+from dataclasses import dataclass, field
+from pathlib import Path
 
 _logger = getLogger(__name__)
+
+
+@dataclass
+class GntRapiAuth:
+    """
+    Dataclass for httpx auth info
+
+    :param str user: Username
+    :param str password: Password for user (UNSECURE)
+    :param Path netrc: path to netrc file, containing login info
+    """
+    user: str = field(repr=False)
+    password: str = field(repr=False)
+    netrc: Path = field(repr=False)
+    auth: httpx.BasicAuth | httpx.NetRCAuth = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.user:
+            self.auth = httpx.BasicAuth(username=self.user, password=self.password)
+            self.__delattr__("netrc")
+            self.__delattr__("user")
+            self.__delattr__("password")
+            return
+        if not os.path.exists(self.netrc):
+            raise ValueError(f"File {self.netrc} doesn't exist")
+        self.auth = httpx.NetRCAuth(file=self.netrc)
 
 
 class GntMonitoring():
@@ -15,34 +44,28 @@ class GntMonitoring():
     :param str host: Hostname of Ganeti rapi daemon, default localhost
     :param str scheme: scheme protocol to use for requests, default: https
     :param int port: port at which ganeti remote api runs, default: 5080
-    :param str user: username if needed for authentication
-    :param str password: password if needed for authentication
     :param bool verify_ssl: check if ssl certificate valid, default false
+    :param GntRapiAuth auth: Authentication dataclass for rapi
     """
 
     def __init__(self,
-                 host: str = "localhost",
-                 scheme: str = "https",
-                 port: int = 5080,
-                 user: str = None,
-                 password: str = "",
+                 host: str,
+                 scheme: str,
+                 port: int,
+                 auth: GntRapiAuth,
                  verify_ssl: bool = False) -> None:
-        if user:
-            logins = {}
-            logins["username"] = user
-            logins["password"] = password
-        self.auth = httpx.BasicAuth(**logins) if user else None
         addr = [scheme]
         addr.append("://")
         addr.append(host)
         addr.append(f":{port}")
         self.address = "".join(addr)
         self.verify_ssl = verify_ssl
+        self.auth = auth
         _logger.debug(f"Rapi address: {self.address}")
-        with httpx.Client(auth=self.auth, verify=self.verify_ssl) as http_client:
+        with httpx.Client(auth=self.auth.auth, verify=self.verify_ssl) as http_client:
             test = http_client.get(url=self.address)
         if test.status_code == 401:
-            msg = "Username and/of password incorrect" if user or password else "Username and/or password not provided"
+            msg = "Username and/of password incorrect" if auth.user or auth.password else "Username and/or password not provided"
             raise ValueError(msg)
 
     def __str__(self) -> str:
@@ -54,7 +77,7 @@ class GntMonitoring():
         :param list url: List of url to get
         :return: list of responses
         """
-        async with httpx.AsyncClient(auth=self.auth, verify=self.verify_ssl) as http_client:
+        async with httpx.AsyncClient(auth=self.auth.auth, verify=self.verify_ssl) as http_client:
             tasks = [http_client.get(f"{self.address}{u}") for u in url]
             results = await asyncio.gather(*tasks)
         return results

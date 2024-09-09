@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gnt-monitoring"
-version = "0.1.0"
+version = "0.1.1"
 description = "A tool to monitoring ganeti cluster via rapi"
 authors = ["Arunas Grigalionis <arunas.grigalionis@gmail.com>"]
 readme = "README.md"
