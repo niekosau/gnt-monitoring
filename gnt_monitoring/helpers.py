@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union
 
 
 def percentage(part: int, whole: int) -> float:
@@ -27,7 +27,7 @@ def convert_to_human(size: int) -> Tuple[float, str]:
     return size, unit
 
 
-def check_for_status(warning: int | float, critical: int | float, value: int | float) -> int:
+def check_for_status(warning: Union[int, float], critical: Union[int, float], value: Union[int, float]) -> int:
     """
     check for value status
     :param int|float warning: Warning value

@@ -3,7 +3,7 @@ import asyncio
 import json
 import os
 from logging import getLogger
-from typing import List
+from typing import List,Union
 from gnt_monitoring.helpers import percentage
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,7 +23,7 @@ class GntRapiAuth:
     user: str = field(repr=False)
     password: str = field(repr=False)
     netrc: Path = field(repr=False)
-    auth: httpx.BasicAuth | httpx.NetRCAuth = field(init=False)
+    auth: Union[httpx.BasicAuth, httpx.NetRCAuth] = field(init=False)
 
     def __post_init__(self) -> None:
         if self.user:
