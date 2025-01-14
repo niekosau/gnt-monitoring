@@ -16,8 +16,7 @@ class Sentry():
         """
         try:
             import sentry_sdk
-        except ModuleNotFoundError:
-            _logger.warning("sentry_sdk not installed")
-        else:
             _logger.debug("Initializing sentry")
             sentry_sdk.init(dsn=dsn, environment=env)
+        except ImportError:
+            pass
