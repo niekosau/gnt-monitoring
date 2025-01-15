@@ -1,4 +1,15 @@
+"""
+Helper functions 
+"""
+
+import re
+import sys
+from logging import getLogger
 from typing import Tuple, Union
+
+from gnt_monitoring.constants import units
+
+_logger = getLogger(__name__)
 
 
 def percentage(part: int, whole: int) -> float:
@@ -27,7 +38,9 @@ def convert_to_human(size: int) -> Tuple[float, str]:
     return size, unit
 
 
-def check_for_status(warning: Union[int, float], critical: Union[int, float], value: Union[int, float]) -> int:
+def check_for_status(
+    warning: Union[int, float], critical: Union[int, float], value: Union[int, float]
+) -> int:
     """
     check for value status
     :param int|float warning: Warning value
@@ -39,3 +52,17 @@ def check_for_status(warning: Union[int, float], critical: Union[int, float], va
     elif value >= critical:
         return 2
     return 0
+
+
+def conver_size(size: str) -> int:
+    """
+    Validate size parameter
+    """
+    _, s, u = re.split("(\\d+)", size)
+    if u == "":
+        return s
+    try:
+        return int(s) * units[u.upper()].value
+    except KeyError:
+        _logger.error("Key %s not found", u)
+        sys.exit(4)

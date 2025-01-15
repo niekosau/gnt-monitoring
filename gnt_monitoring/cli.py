@@ -1,95 +1,27 @@
+"""
+Script erntry point
+"""
+
 import asyncio
 import json
 import sys
-import time
-from argparse import Namespace
-from logging import getLogger
 
-from tabulate import tabulate
+# from argparse import Namespace
+from logging import getLogger
 
 from gnt_monitoring._decorators import argument, command
 from gnt_monitoring.arguments import base_args
+from gnt_monitoring.checks import memory_check
 from gnt_monitoring.constants import NAGIOS_STATUS_CODES
-from gnt_monitoring.helpers import check_for_status, convert_to_human
+from gnt_monitoring.helpers import check_for_status, conver_size, convert_to_human
 from gnt_monitoring.logger import init_logger
-from gnt_monitoring.rapi import GntMonitoring, GntRapiAuth
+from gnt_monitoring.rapi import GntMonitoring, init_gnt_monitoring
 from gnt_monitoring.sentry import Sentry
 
 args = base_args()
 
 subparser = args.add_subparsers(dest="subcommand")
 _logger = getLogger(__name__)
-
-
-async def memory_check(cluster: GntMonitoring, **params) -> None:
-    """
-    Memory monitoring function
-    :param float warning: percentage at which return warning
-    :param float critical: percentage at which return critical
-    """
-    warning = params.pop("warning")
-    critical = params.pop("critical")
-    monitoring_data = {}
-    start = time.perf_counter()
-    hosts = await cluster.hosts()
-    hosts = [h["id"] for h in hosts]
-    for host in hosts:
-        host_memory = await cluster.host_memory(host=host)
-        host_memory["status"] = check_for_status(
-            warning=warning, critical=critical, value=host_memory["allocated_perc"]
-        )
-        _logger.debug(f"Memory data:\n{json.dumps(host_memory, indent=2)}")
-        monitoring_data[host] = host_memory
-    end = time.perf_counter()
-    exec_time = round(end - start, 2)
-    _logger.debug(f"Collecting data took: {exec_time}")
-    process_results(monitoring_data)
-
-
-def init_gnt_monitoring(**kwargs) -> GntMonitoring:
-    """
-    Function to initialyze ganeti monitoring class
-    """
-    # warning = kwargs.pop("warning")
-    # critical = kwargs.pop("critical")
-    rapi_host = kwargs.pop("rapi_host")
-    rapi_port = kwargs.pop("rapi_port")
-    rapi_scheme = kwargs.pop("rapi_scheme")
-    rapi_auth = GntRapiAuth(
-        user=kwargs.pop("rapi_user"),
-        password=kwargs.pop("rapi_password"),
-        netrc=kwargs.pop("netrc_file"),
-    )
-    return GntMonitoring(
-        host=rapi_host, port=rapi_port, scheme=rapi_scheme, auth=rapi_auth
-    )
-
-
-def process_results(data: dict) -> None:
-    """
-    Process gathered results
-    :param dict data: data collected from rapi
-    :return: None
-    """
-    overal_status = max([s["status"] for _, s in data.items()])
-    output = [["Host", "Status", "Usage %", "Total", "Allocated", "Used", "Available"]]
-    for host, info in data.items():
-        host_line = []
-        host_line.append(host)
-        status_converted = NAGIOS_STATUS_CODES.get(info["status"])
-        host_line.append(status_converted)
-        host_line.append(info["allocated_perc"])
-        total = convert_to_human(info["total"])
-        host_line.append(f"{total[0]} {total[1]}")
-        allocated = convert_to_human(info["allocated"])
-        host_line.append(f"{allocated[0]} {allocated[1]}")
-        used = convert_to_human(info["used"])
-        host_line.append(f"{used[0]} {used[1]}")
-        free = convert_to_human(info["free"])
-        host_line.append(f"{free[0]} {free[1]}")
-        output.append(host_line)
-    print(tabulate(output, tablefmt="simple", headers="firstrow", numalign="center"))
-    sys.exit(overal_status)
 
 
 @command(
@@ -108,23 +40,36 @@ def process_results(data: dict) -> None:
             default=90,
             type=float,
         ),
+        argument("-W", "--warning-size", help="Warning size", type=str),
+        argument("-C", "--critical-size", help="Critical size", type=str),
     ],
     parent=subparser,  # type: ignore
 )
-def check(cluster: GntMonitoring, pargs: dict) -> None:
+def node_memory(cluster: GntMonitoring, pargs: dict) -> None:
     """
     Main check command
     """
-    if pargs["warning"] >= pargs["critical"]:
-        _logger.error("Warning value can't be equal or higher then critical")
-        sys.exit(5)
-    asyncio.run(memory_check(cluster, **pargs))
-
-
-async def calculate_cluster_memory(cluster: GntMonitoring) -> None:
-    """
-    Function to calculate total cluster memory
-    """
+    if bool(pargs.get("warning_size")) or bool(pargs.get("critical_size")):
+        if not bool(pargs.get("warning_size")):
+            _logger.error("Warning size not provided")
+            sys.exit(4)
+        if not bool(pargs.get("critical_size")):
+            _logger.error("Critical size not provided")
+            sys.exit(4)
+        warning = conver_size(pargs["warning_size"])
+        critical = conver_size(pargs["critical_size"])
+        if critical >= warning:
+            _logger.error("Warning value can't be equal or less then critical")
+            sys.exit(4)
+        field_to_check = "free"
+    else:
+        if pargs["warning"] >= pargs["critical"]:
+            _logger.error("Warning value can't be equal or higher then critical")
+            sys.exit(5)
+        warning = pargs.get("warning")
+        critical = pargs.get("critical")
+        field_to_check = "allocated_perc"
+    asyncio.run(memory_check(cluster, warning, critical, field_to_check))
 
 
 @command(
@@ -174,17 +119,18 @@ def cluster_memory(cluster: GntMonitoring, pargs: dict) -> None:
     results["nodes available"] = round(
         results["available"] / results["biggest node"], 2
     )
+    status = check_for_status(
+        warning=-abs(pargs["warning"]),
+        critical=-abs(pargs["critical"]),
+        value=-abs(results["nodes available"]),
+    )
+    results = {"overal status": NAGIOS_STATUS_CODES.get(status)} | results
     for k, v in results.items():
         if isinstance(v, int):
             value, unit = convert_to_human(v)
             print(f"{k.capitalize():<{key_length}} : {value} {unit}")
         else:
             print(f"{k.capitalize():<{key_length}} : {v}")
-    status = check_for_status(
-        warning=-abs(pargs["warning"]),
-        critical=-abs(pargs["critical"]),
-        value=-abs(results["nodes available"]),
-    )
     sys.exit(status)
 
 
@@ -200,8 +146,7 @@ def main() -> None:
         Sentry(dsn=parsed.sentry_dsn, env=parsed.sentry_env)
     cluster = init_gnt_monitoring(**parsed.__dict__)
     if parsed.subcommand is None:
-        asyncio.run(memory_check(cluster=cluster, **parsed.__dict__))
-        # args.print_help()
+        args.print_help()
         return
     try:
         parsed.func(cluster, parsed.__dict__)

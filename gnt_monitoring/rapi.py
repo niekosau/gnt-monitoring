@@ -1,12 +1,18 @@
-import httpx
+"""
+Ganeti api module
+"""
+
 import asyncio
 import json
 import os
-from logging import getLogger
-from typing import List,Union
-from gnt_monitoring.helpers import percentage
 from dataclasses import dataclass, field
+from logging import getLogger
 from pathlib import Path
+from typing import List, Union
+
+import httpx
+
+from gnt_monitoring.helpers import percentage
 
 _logger = getLogger(__name__)
 
@@ -20,6 +26,7 @@ class GntRapiAuth:
     :param str password: Password for user (UNSECURE)
     :param Path netrc: path to netrc file, containing login info
     """
+
     user: str = field(repr=False)
     password: str = field(repr=False)
     netrc: Path = field(repr=False)
@@ -37,7 +44,7 @@ class GntRapiAuth:
         self.auth = httpx.NetRCAuth(file=self.netrc)
 
 
-class GntMonitoring():
+class GntMonitoring:
     """
     Class for ganeti monitoring
 
@@ -48,12 +55,14 @@ class GntMonitoring():
     :param GntRapiAuth auth: Authentication dataclass for rapi
     """
 
-    def __init__(self,
-                 host: str,
-                 scheme: str,
-                 port: int,
-                 auth: GntRapiAuth,
-                 verify_ssl: bool = False) -> None:
+    def __init__(
+        self,
+        host: str,
+        scheme: str,
+        port: int,
+        auth: GntRapiAuth,
+        verify_ssl: bool = False,
+    ) -> None:
         addr = [scheme]
         addr.append("://")
         addr.append(host)
@@ -65,7 +74,11 @@ class GntMonitoring():
         with httpx.Client(auth=self.auth.auth, verify=self.verify_ssl) as http_client:
             test = http_client.get(url=self.address)
         if test.status_code == 401:
-            msg = "Username and/of password incorrect" if auth.user or auth.password else "Username and/or password not provided"
+            msg = (
+                "Username and/of password incorrect"
+                if auth.user or auth.password
+                else "Username and/or password not provided"
+            )
             raise ValueError(msg)
 
     def __str__(self) -> str:
@@ -77,7 +90,9 @@ class GntMonitoring():
         :param list url: List of url to get
         :return: list of responses
         """
-        async with httpx.AsyncClient(auth=self.auth.auth, verify=self.verify_ssl) as http_client:
+        async with httpx.AsyncClient(
+            auth=self.auth.auth, verify=self.verify_ssl
+        ) as http_client:
             tasks = [http_client.get(f"{self.address}{u}") for u in url]
             results = await asyncio.gather(*tasks)
         return results
@@ -117,6 +132,25 @@ class GntMonitoring():
         results["used"] = response.pop("mnode")
         results["free"] = response.pop("mfree")
         results["used_perc"] = percentage(results["used"], results["total"])
-        results["allocated"] = await self._memory_allocated(instances=host_instance_list)
+        results["allocated"] = await self._memory_allocated(
+            instances=host_instance_list
+        )
         results["allocated_perc"] = percentage(results["allocated"], results["total"])
         return results
+
+
+def init_gnt_monitoring(**kwargs) -> GntMonitoring:
+    """
+    Function to initialyze ganeti monitoring class
+    """
+    rapi_host = kwargs.pop("rapi_host")
+    rapi_port = kwargs.pop("rapi_port")
+    rapi_scheme = kwargs.pop("rapi_scheme")
+    rapi_auth = GntRapiAuth(
+        user=kwargs.pop("rapi_user"),
+        password=kwargs.pop("rapi_password"),
+        netrc=kwargs.pop("netrc_file"),
+    )
+    return GntMonitoring(
+        host=rapi_host, port=rapi_port, scheme=rapi_scheme, auth=rapi_auth
+    )

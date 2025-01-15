@@ -1,12 +1,18 @@
+"""
+Logger module
+"""
+
 import logging
+
 from gnt_monitoring.constants import DEFAULT_LOG_FORMAT
 
 
 def init_logger(
-        name: str = "gnt_monitoring",
-        level: str = "info",
-        format: str = DEFAULT_LOG_FORMAT,
-        console: bool = True) -> None:
+    name: str = "gnt_monitoring",
+    level: str = "info",
+    format: str = DEFAULT_LOG_FORMAT,
+    console: bool = True,
+) -> None:
     """
     Setup logger for this tool
 

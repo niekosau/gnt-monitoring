@@ -1,3 +1,7 @@
+"""
+Default argument module
+"""
+
 import argparse
 import os
 from pathlib import Path
